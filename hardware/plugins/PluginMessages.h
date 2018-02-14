@@ -2,6 +2,7 @@
 
 #include "DelayedLink.h"
 #include "Plugins.h"
+#include "../main/Logger.h"
 
 #ifndef byte
 typedef unsigned char byte;
@@ -85,7 +86,10 @@ namespace Plugins {
 		virtual void ProcessLocked() = 0;
 	public:
 		CCallbackBase(CPlugin* pPlugin, std::string Callback) : CPluginMessageBase(pPlugin), m_Callback(Callback) {};
-		virtual void Callback(PyObject* pParams) { if (m_Callback.length()) m_pPlugin->Callback(m_Callback, pParams); };
+		virtual void Callback(PyObject* pParams) {
+			_log.Log(LOG_ERROR, "(Callback) m_Callback: %s, pParams: %p", m_Callback.c_str(), pParams);
+			if (m_Callback.length()) m_pPlugin->Callback(m_Callback, pParams);
+		};
 		void Process()
 		{
 			boost::lock_guard<boost::mutex> l(PythonMutex);
@@ -127,6 +131,7 @@ namespace Plugins {
 	protected:
 		virtual void ProcessLocked()
 		{
+			_log.Log(LOG_ERROR, "(onConnectCallback) m_pConnection: %p, m_Status: %d, m_Text: %s", m_pConnection, m_Status, m_Text.c_str());
 			Callback(Py_BuildValue("Ois", m_pConnection, m_Status, m_Text.c_str()));  // 0 is success else socket failure code
 		};
 	};
