@@ -52,6 +52,6 @@ deploy:
   password: $(FTP_PASSWORD)
   folder: beta
   on:
-    APPVEYOR_REPO_NAME: domoticz/domoticz
-    APPVEYOR_REPO_BRANCH: development
+    APPVEYOR_REPO_NAME: emontnemery/domoticz
+    APPVEYOR_REPO_BRANCH: plugin_debug
 
