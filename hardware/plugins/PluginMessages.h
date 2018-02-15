@@ -87,7 +87,6 @@ namespace Plugins {
 	public:
 		CCallbackBase(CPlugin* pPlugin, std::string Callback) : CPluginMessageBase(pPlugin), m_Callback(Callback) {};
 		virtual void Callback(PyObject* pParams) {
-			_log.Log(LOG_ERROR, "(Callback) m_Callback: %s, pParams: %p", m_Callback.c_str(), pParams);
 			if (m_Callback.length()) m_pPlugin->Callback(m_Callback, pParams);
 		};
 		void Process()
@@ -161,9 +160,8 @@ static std::string get_utf8_from_ansi(const std::string &utf8, int codepage)
 #ifdef _WIN32
 			std::string textUTF8 = get_utf8_from_ansi(m_Text, GetACP());
 #else
-			std::string textUTF8 = m_Text; // Is it safe to assume non-Windows will always be UTF-8?
+			std::string textUTF8 = m_Text; // TODO: Is it safe to assume non-Windows will always be UTF-8?
 #endif
-			_log.Log(LOG_ERROR, "(onConnectCallback) m_pConnection: %p, m_Status: %d, m_Text: %s", m_pConnection, m_Status, m_Text.c_str());
 			Callback(Py_BuildValue("Ois", m_pConnection, m_Status, textUTF8.c_str()));  // 0 is success else socket failure code
 		};
 	};
