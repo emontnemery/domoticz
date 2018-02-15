@@ -132,7 +132,7 @@ namespace Plugins {
 		virtual void ProcessLocked()
 		{
 			_log.Log(LOG_ERROR, "(onConnectCallback) m_pConnection: %p, m_Status: %d, m_Text: %s", m_pConnection, m_Status, m_Text.c_str());
-			Callback(Py_BuildValue("Ois", m_pConnection, m_Status, m_Text.c_str()));  // 0 is success else socket failure code
+			Callback(Py_BuildValue("Ois", m_pConnection, m_Status, "Error code suppressed to avoid encoding error"));  // 0 is success else socket failure code
 		};
 	};
 
