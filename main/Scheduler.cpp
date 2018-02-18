@@ -73,7 +73,7 @@ void CScheduler::ReloadSchedules()
 	//Add Device Timers
 	result = m_sql.safe_query(
 		"SELECT T1.DeviceRowID, T1.Time, T1.Type, T1.Cmd, T1.Level, T1.Days, T2.Name,"
-		" T2.Used, T1.UseRandomness, T1.Hue, T1.[Date], T1.MDay, T1.Month, T1.Occurence, T1.ID"
+		" T2.Used, T1.UseRandomness, T1.Color, T1.[Date], T1.MDay, T1.Month, T1.Occurence, T1.ID"
 		" FROM Timers as T1, DeviceStatus as T2"
 		" WHERE ((T1.Active == 1) AND (T1.TimerPlan == %d) AND (T2.ID == T1.DeviceRowID))"
 		" ORDER BY T1.ID",
@@ -111,7 +111,7 @@ void CScheduler::ReloadSchedules()
 				titem.timerCmd = (_eTimerCommand)atoi(sd[3].c_str());
 				titem.Level = (unsigned char)atoi(sd[4].c_str());
 				titem.bUseRandomness = (atoi(sd[8].c_str()) != 0);
-				titem.Hue = atoi(sd[9].c_str());
+				//titem.Color = _tColor(sd[9]); TODO enable constructor
 				titem.MDay = 0;
 				titem.Month = 0;
 				titem.Occurence = 0;
@@ -895,7 +895,7 @@ void CScheduler::CheckSchedules()
 									ilevel = 0; // force level to a valid value for Selector
 								}
 							}
-							if (!m_mainworker.SwitchLight(itt->RowID, switchcmd, ilevel, itt->Hue,false,0))
+							if (!m_mainworker.SwitchLight(itt->RowID, switchcmd, ilevel, itt->Color, false, 0))
 							{
 								_log.Log(LOG_ERROR, "Error sending switch command, DevID: %" PRIu64 ", Time: %s", itt->RowID, ltimeBuf);
 							}
@@ -992,7 +992,7 @@ namespace http {
 			if ((rfilter == "all") || (rfilter == "") || (rfilter == "device")) {
 				tmp_result = m_sql.safe_query(
 					"SELECT t.ID, t.Active, d.[Name], t.DeviceRowID AS ID, 0 AS IsScene, 0 AS IsThermostat,"
-					" t.[Date], t.Time, t.Type, t.Cmd, t.Level, t.Hue, 0 AS Temperature, t.Days,"
+					" t.[Date], t.Time, t.Type, t.Cmd, t.Level, t.Color, 0 AS Temperature, t.Days,"
 					" t.UseRandomness, t.MDay, t.Month, t.Occurence"
 					" FROM Timers AS t, DeviceStatus AS d"
 					" WHERE (d.ID == t.DeviceRowID) AND (t.TimerPlan==%d)"
@@ -1006,7 +1006,7 @@ namespace http {
 			if ((rfilter == "all") || (rfilter == "") || (rfilter == "scene")) {
 				tmp_result = m_sql.safe_query(
 					"SELECT t.ID, t.Active, s.[Name], t.SceneRowID AS ID, 1 AS IsScene, 0 AS IsThermostat"
-					", t.[Date], t.Time, t.Type, t.Cmd, t.Level, t.Hue, 0 AS Temperature, t.Days,"
+					", t.[Date], t.Time, t.Type, t.Cmd, t.Level, t.Color, 0 AS Temperature, t.Days,"
 					" t.UseRandomness, t.MDay, t.Month, t.Occurence"
 					" FROM SceneTimers AS t, Scenes AS s"
 					" WHERE (s.ID == t.SceneRowID) AND (t.TimerPlan==%d)"
@@ -1020,7 +1020,7 @@ namespace http {
 			if ((rfilter == "all") || (rfilter == "") || (rfilter == "thermostat")) {
 				tmp_result = m_sql.safe_query(
 					"SELECT t.ID, t.Active, d.[Name], t.DeviceRowID AS ID, 0 AS IsScene, 1 AS IsThermostat,"
-					" t.[Date], t.Time, t.Type, 0 AS Cmd, 0 AS Level, 0 AS Hue, t.Temperature, t.Days,"
+					" t.[Date], t.Time, t.Type, 0 AS Cmd, 0 AS Level, 0 AS Color, t.Temperature, t.Days,"
 					" 0 AS UseRandomness, t.MDay, t.Month, t.Occurence"
 					" FROM SetpointTimers AS t, DeviceStatus AS d"
 					" WHERE (d.ID == t.DeviceRowID) AND (t.TimerPlan==%d)"
@@ -1083,7 +1083,7 @@ namespace http {
 					root["result"][ii]["Type"] = bIsScene ? "Scene" : "Device";
 					root["result"][ii]["IsThermostat"] = bIsThermostat ? "true" : "false";
 					root["result"][ii]["DevName"] = sd[2];
-					root["result"][ii]["DeviceRowID"] = atoi(sd[3].c_str());
+					root["result"][ii]["DeviceRowID"] = atoi(sd[3].c_str()); //TODO: Isn't this a 64 bit device index?
 					root["result"][ii]["Date"] = sdate;
 					root["result"][ii]["Time"] = sd[7];
 					root["result"][ii]["TimerType"] = iTimerType;
@@ -1101,7 +1101,7 @@ namespace http {
 					{
 						root["result"][ii]["TimerCmd"] = atoi(sd[9].c_str());
 						root["result"][ii]["Level"] = iLevel;
-						root["result"][ii]["Hue"] = atoi(sd[11].c_str());
+						root["result"][ii]["Hue"] = atoi(sd[11].c_str()); //TODO: Fix
 						root["result"][ii]["Randomness"] = (atoi(sd[14].c_str()) != 0) ? "true" : "false";
 					}
 					ii++;
@@ -1123,7 +1123,7 @@ namespace http {
 			char szTmp[50];
 
 			std::vector<std::vector<std::string> > result;
-			result = m_sql.safe_query("SELECT ID, Active, [Date], Time, Type, Cmd, Level, Hue, Days, UseRandomness, MDay, Month, Occurence FROM Timers WHERE (DeviceRowID==%" PRIu64 ") AND (TimerPlan==%d) ORDER BY ID",
+			result = m_sql.safe_query("SELECT ID, Active, [Date], Time, Type, Cmd, Level, Color, Days, UseRandomness, MDay, Month, Occurence FROM Timers WHERE (DeviceRowID==%" PRIu64 ") AND (TimerPlan==%d) ORDER BY ID",
 				idx, m_sql.m_ActiveTimerPlan);
 			if (result.size() > 0)
 			{
@@ -1157,7 +1157,7 @@ namespace http {
 					root["result"][ii]["Type"] = iTimerType;
 					root["result"][ii]["Cmd"] = atoi(sd[5].c_str());
 					root["result"][ii]["Level"] = iLevel;
-					root["result"][ii]["Hue"] = atoi(sd[7].c_str());
+					root["result"][ii]["Hue"] = atoi(sd[7].c_str()); // TODO: Fix
 					root["result"][ii]["Days"] = atoi(sd[8].c_str());
 					root["result"][ii]["Randomness"] = (atoi(sd[9].c_str()) == 0) ? "false" : "true";
 					root["result"][ii]["MDay"] = atoi(sd[10].c_str());
@@ -1214,7 +1214,7 @@ namespace http {
 			std::string scmd = request::findValue(&req, "command");
 			std::string sdays = request::findValue(&req, "days");
 			std::string slevel = request::findValue(&req, "level");	//in percentage
-			std::string shue = request::findValue(&req, "hue");
+			std::string scolor = request::findValue(&req, "color");
 			std::string smday = "0";
 			std::string smonth = "0";
 			std::string soccurence = "0";
@@ -1275,14 +1275,14 @@ namespace http {
 			unsigned char icmd = atoi(scmd.c_str());
 			int days = atoi(sdays.c_str());
 			unsigned char level = atoi(slevel.c_str());
-			uint32_t hue = atoi(shue.c_str());
+			_tColor color;// = _tColor(scolor); //TODO: Re-enable constructor
 			int mday = atoi(smday.c_str());
 			int month = atoi(smonth.c_str());
 			int occurence = atoi(soccurence.c_str());
 			root["status"] = "OK";
 			root["title"] = "AddTimer";
 			m_sql.safe_query(
-				"INSERT INTO Timers (Active, DeviceRowID, [Date], Time, Type, UseRandomness, Cmd, Level, Hue, Days, MDay, Month, Occurence, TimerPlan) VALUES (%d,'%q','%04d-%02d-%02d','%02d:%02d',%d,%d,%d,%d,%d,%d,%d,%d,%d,%d)",
+				"INSERT INTO Timers (Active, DeviceRowID, [Date], Time, Type, UseRandomness, Cmd, Level, Color, Days, MDay, Month, Occurence, TimerPlan) VALUES (%d,'%q','%04d-%02d-%02d','%02d:%02d',%d,%d,%d,%d,'%q',%d,%d,%d,%d,%d)",
 				(active == "true") ? 1 : 0,
 				idx.c_str(),
 				Year, Month, Day,
@@ -1291,7 +1291,7 @@ namespace http {
 				(randomness == "true") ? 1 : 0,
 				icmd,
 				level,
-				hue,
+				color.toJSONfloat(),
 				days,
 				mday,
 				month,
@@ -1319,7 +1319,7 @@ namespace http {
 			std::string scmd = request::findValue(&req, "command");
 			std::string sdays = request::findValue(&req, "days");
 			std::string slevel = request::findValue(&req, "level");	//in percentage
-			std::string shue = request::findValue(&req, "hue");
+			std::string scolor = request::findValue(&req, "color");
 			std::string smday = "0";
 			std::string smonth = "0";
 			std::string soccurence = "0";
@@ -1380,14 +1380,14 @@ namespace http {
 			unsigned char icmd = atoi(scmd.c_str());
 			int days = atoi(sdays.c_str());
 			unsigned char level = atoi(slevel.c_str());
-			uint32_t hue = atoi(shue.c_str());
+			_tColor color;// = _tColor(scolor); TODO re-enable constructor
 			int mday = atoi(smday.c_str());
 			int month = atoi(smonth.c_str());
 			int occurence = atoi(soccurence.c_str());
 			root["status"] = "OK";
 			root["title"] = "UpdateTimer";
 			m_sql.safe_query(
-				"UPDATE Timers SET Active=%d, [Date]='%04d-%02d-%02d', Time='%02d:%02d', Type=%d, UseRandomness=%d, Cmd=%d, Level=%d, Hue=%d, Days=%d, MDay=%d, Month=%d, Occurence=%d WHERE (ID == '%q')",
+				"UPDATE Timers SET Active=%d, [Date]='%04d-%02d-%02d', Time='%02d:%02d', Type=%d, UseRandomness=%d, Cmd=%d, Level=%d, Color='%q', Days=%d, MDay=%d, Month=%d, Occurence=%d WHERE (ID == '%q')",
 				(active == "true") ? 1 : 0,
 				Year, Month, Day,
 				hour, min,
@@ -1395,7 +1395,7 @@ namespace http {
 				(randomness == "true") ? 1 : 0,
 				icmd,
 				level,
-				hue,
+				color.toJSONfloat(),
 				days,
 				mday,
 				month,
@@ -1824,7 +1824,7 @@ namespace http {
 			char szTmp[40];
 
 			std::vector<std::vector<std::string> > result;
-			result = m_sql.safe_query("SELECT ID, Active, [Date], Time, Type, Cmd, Level, Hue, Days, UseRandomness, MDay, Month, Occurence FROM SceneTimers WHERE (SceneRowID==%" PRIu64 ") AND (TimerPlan==%d) ORDER BY ID",
+			result = m_sql.safe_query("SELECT ID, Active, [Date], Time, Type, Cmd, Level, Color, Days, UseRandomness, MDay, Month, Occurence FROM SceneTimers WHERE (SceneRowID==%" PRIu64 ") AND (TimerPlan==%d) ORDER BY ID",
 				idx, m_sql.m_ActiveTimerPlan);
 			if (result.size() > 0)
 			{
@@ -1858,7 +1858,7 @@ namespace http {
 					root["result"][ii]["Type"] = iTimerType;
 					root["result"][ii]["Cmd"] = atoi(sd[5].c_str());
 					root["result"][ii]["Level"] = iLevel;
-					root["result"][ii]["Hue"] = atoi(sd[7].c_str());
+					root["result"][ii]["Color"] = atoi(sd[7].c_str()); //TODO: Fix me!
 					root["result"][ii]["Days"] = atoi(sd[8].c_str());
 					root["result"][ii]["Randomness"] = (atoi(sd[9].c_str()) == 0) ? "false" : "true";
 					root["result"][ii]["MDay"] = atoi(sd[10].c_str());

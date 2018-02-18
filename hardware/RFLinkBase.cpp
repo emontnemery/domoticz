@@ -366,7 +366,7 @@ bool CRFLinkBase::WriteToHardware(const char *pdata, const unsigned char length)
 		const int m_LEDType = pLed->type;
 		std::string switchtype = GetGeneralRFLinkFromInt(rfswitches, (pSwitch->subtype == sTypeLimitlessLivCol) ? sSwitchTypeLivcol : sSwitchMiLightv1);
 		std::string switchcmnd = GetGeneralRFLinkFromInt(rfswitchcommands, pLed->command);
-		unsigned int m_colorbright = 0;
+		unsigned int colorbright = 0;
 
 		switch (pLed->command){
 		case Limitless_LedOn:
@@ -377,9 +377,13 @@ bool CRFLinkBase::WriteToHardware(const char *pdata, const unsigned char length)
 			break;
 		case Limitless_SetRGBColour:
 			{
-            int iHue = ((pLed->value)+0x20) & 0xFF;  //Milight color offset correction
-			m_colorbright = m_colorbright & 0xff;
-			m_colorbright = (((unsigned char) iHue) << 8) + m_colorbright;
+			// Convert RGB to HSV
+			float hsb[3];
+			rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+			int iHue = hsb[0]*255.0f;
+			iHue = (iHue+0x20) & 0xFF;  //Milight color offset correction
+			colorbright = colorbright & 0xff;
+			colorbright = (((unsigned char) iHue) << 8) + colorbright;
 			switchcmnd = "COLOR";
 			bSendOn = true;
 		    }
@@ -402,11 +406,11 @@ bool CRFLinkBase::WriteToHardware(const char *pdata, const unsigned char length)
 		case Limitless_SetBrightnessLevel:
 			{
 			//brightness (0-100) converted to 0x00-0xff
-			int m_brightness = (unsigned char)pLed->value;
-			m_brightness = (m_brightness * 255) / 100;
-			m_brightness = m_brightness & 0xff;
-			m_colorbright = m_colorbright & 0xff00;
-			m_colorbright = m_colorbright + (unsigned char)m_brightness;
+			int brightness = (unsigned char)pLed->value;
+			brightness = (brightness * 255) / 100;
+			brightness = brightness & 0xff;
+			colorbright = colorbright & 0xff00;
+			colorbright = colorbright + (unsigned char)brightness;
 			switchcmnd = "BRIGHT";
 			bSendOn = true;
 		    }
@@ -446,7 +450,7 @@ bool CRFLinkBase::WriteToHardware(const char *pdata, const unsigned char length)
 			std::string tswitchcmnd = "ON";
 			//Build send string
 			std::stringstream sstr;
-			sstr << "10;" << switchtype << ";" << std::hex << std::nouppercase << std::setw(4) << std::setfill('0') << pLed->id << ";" << std::setw(2) << std::setfill('0') << int(pLed->dunit) << ";" << std::hex << std::nouppercase << std::setw(4) << m_colorbright << ";" << tswitchcmnd;
+			sstr << "10;" << switchtype << ";" << std::hex << std::nouppercase << std::setw(4) << std::setfill('0') << pLed->id << ";" << std::setw(2) << std::setfill('0') << int(pLed->dunit) << ";" << std::hex << std::nouppercase << std::setw(4) << colorbright << ";" << tswitchcmnd;
 			_log.Log(LOG_STATUS, "RFLink Sending: %s", sstr.str().c_str());
 			sstr << "\n";
 			m_bTXokay = false; // clear OK flag
@@ -469,7 +473,7 @@ bool CRFLinkBase::WriteToHardware(const char *pdata, const unsigned char length)
 		std::stringstream sstr;
 		//10;MiLightv1;1234;01;5566;ON;     => protocol;address;unit number;color&brightness;action (ON/OFF/ALLON/ALLOFF etc)
 
-		sstr << "10;" << switchtype << ";" << std::hex << std::nouppercase << std::setw(4) << std::setfill('0') << pLed->id << ";" << std::setw(2) << std::setfill('0') << int(pLed->dunit) << ";" << std::hex << std::nouppercase << std::setw(4) << m_colorbright << ";" << switchcmnd;
+		sstr << "10;" << switchtype << ";" << std::hex << std::nouppercase << std::setw(4) << std::setfill('0') << pLed->id << ";" << std::setw(2) << std::setfill('0') << int(pLed->dunit) << ";" << std::hex << std::nouppercase << std::setw(4) << colorbright << ";" << switchcmnd;
 		//#ifdef _DEBUG
 		_log.Log(LOG_STATUS, "RFLink Sending: %s", sstr.str().c_str());
 		//#endif

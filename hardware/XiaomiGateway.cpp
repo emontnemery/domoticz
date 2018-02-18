@@ -192,8 +192,9 @@ bool XiaomiGateway::WriteToHardware(const char * pdata, const unsigned char leng
 		}
 		else if (xcmd->command == Limitless_SetRGBColour) {
 			int red, green, blue;
-			float cHue = (360.0f / 255.0f)*float(xcmd->value);//hue given was in range of 0-255
-			hue2rgb(cHue, red, green, blue, 255);
+			red = round(xcmd->color.r*255.0f);
+			green = round(xcmd->color.g*255.0f);
+			blue = round(xcmd->color.b*255.0f);
 			std::stringstream sstr;
 			sstr << std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << red
 				<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << green
@@ -344,9 +345,9 @@ void XiaomiGateway::InsertUpdateRGBGateway(const std::string & nodeid, const std
 		_log.Log(LOG_STATUS, "XiaomiGateway: New Gateway Found (%s/%s)", str.c_str(), Name.c_str());
 		//int value = atoi(brightness.c_str());
 		//int value = hue; // atoi(hue.c_str());
-		int cmd = light1_sOn;
+		int cmd = light1_sOn; // TODO: Should be Limitless_LedOn?
 		if (!bIsOn) {
-			cmd = light1_sOff;
+			cmd = light1_sOff; // TODO: Should be Limitless_LedOff?
 		}
 		_tLimitlessLights ycmd;
 		ycmd.len = sizeof(_tLimitlessLights) - 1;

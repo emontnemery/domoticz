@@ -270,7 +270,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 			else
 				level = root["level"].asInt();
 		}
-		if (!m_mainworker.SwitchLight(idx, switchcmd, level, -1, false, 0) == true)
+		if (!m_mainworker.SwitchLight(idx, switchcmd, level, NoColor, false, 0) == true)
 		{
 			_log.Log(LOG_ERROR, "MQTT: Error sending switch command!");
 		}
@@ -315,7 +315,7 @@ void MQTT::on_message(const struct mosquitto_message *message)
 				isWhite = root["isWhite"].asInt();
 		}
 		
-		if (!m_mainworker.SwitchLight(idx, switchcmd, level, hue, isWhite!=0, 0) == true)
+		if (!m_mainworker.SwitchLight(idx, switchcmd, level, NoColor, isWhite!=0, 0) == true) //TODO: Convert hue to RGB
 		{
 			_log.Log(LOG_ERROR, "MQTT: Error sending switch command!");
 		}
@@ -556,6 +556,7 @@ void MQTT::SendDeviceInfo(const int m_HwdID, const uint64_t DeviceRowIdx, const 
 	if (!m_IsConnected)
 		return;
 	std::vector<std::vector<std::string> > result;
+	//TODO: Send color
 	result = m_sql.safe_query("SELECT DeviceID, Unit, Name, [Type], SubType, nValue, sValue, SwitchType, SignalLevel, BatteryLevel, Options, Description FROM DeviceStatus WHERE (HardwareID==%d) AND (ID==%" PRIu64 ")", m_HwdID, DeviceRowIdx);
 	if (result.size() > 0)
 	{

@@ -1464,16 +1464,10 @@ bool MySensorsBase::WriteToHardware(const char *pdata, const unsigned char lengt
 			bool bIsRGBW = (pNode->FindChildWithPresentationType(child_sensor_id, S_RGBW_LIGHT) != NULL);
 			if (pLed->command == Limitless_SetRGBColour)
 			{
-				int red, green, blue;
-
-				float cHue = (360.0f / 255.0f)*float(pLed->value);//hue given was in range of 0-255
-				int Brightness = 100;
-				int dMax = round((255.0f / 100.0f)*float(Brightness));
-				hue2rgb(cHue, red, green, blue, dMax);
 				std::stringstream sstr;
-				sstr << std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << red
-					<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << green
-					<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << blue;
+				sstr << std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << int(pLed->color.r*255.0f)
+					<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << int(pLed->color.g*255.0f)
+					<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << int(pLed->color.b*255.0f);
 				return SendNodeSetCommand(node_id, child_sensor_id, MT_Set, (bIsRGBW == true) ? V_RGBW : V_RGB, sstr.str(), pChild->useAck, pChild->ackTimeout);
 			}
 			else if (pLed->command == Limitless_SetColorToWhite)

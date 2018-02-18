@@ -118,7 +118,8 @@ void Yeelight::Do_Work()
 }
 
 
-void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &lightName, const int &YeeType, const std::string &Location, const bool bIsOn, const std::string &yeelightBright, const std::string &yeelightHue)
+void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &lightName, const int &YeeType, const std::string &Location, const bool bIsOn, const std::string &yeelightBright, const std::string &yeelightHue,
+                                  const std::string &yeelightSat, const std::string &yeelightRGB, const std::string &yeelightCT, const std::string &yeelightColorMode)
 {
 	std::vector<std::string> ipaddress;
 	StringSplit(Location, ".", ipaddress);
@@ -143,10 +144,10 @@ void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &
 	{
 		_log.Log(LOG_STATUS, "YeeLight: New Light Found (%s/%s)", Location.c_str(), lightName.c_str());
 		int value = atoi(yeelightBright.c_str());
-		int cmd = light1_sOn;
+		int cmd = light1_sOn; // TODO: Should be Limitless_LedOn?
 		int level = 100;
 		if (!bIsOn) {
-			cmd = light1_sOff;
+			cmd = light1_sOff; // TODO: Should be Limitless_LedOff?
 			level = 0;
 		}
 		_tLimitlessLights ycmd;
@@ -157,6 +158,7 @@ void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &
 		ycmd.dunit = 0;
 		ycmd.value = value;
 		ycmd.command = cmd;
+		// TODO: Update color
 		m_mainworker.PushAndWaitRxMessage(this, (const unsigned char *)&ycmd, NULL, -1);
 		m_sql.safe_query("UPDATE DeviceStatus SET Name='%q', SwitchType=%d, LastLevel=%d WHERE(HardwareID == %d) AND (DeviceID == '%q')", lightName.c_str(), (STYPE_Dimmer), value, m_HwdID, szDeviceID);
 	}
@@ -183,6 +185,7 @@ void Yeelight::InsertUpdateSwitch(const std::string &nodeID, const std::string &
 			ycmd.dunit = 0;
 			ycmd.value = value;
 			ycmd.command = cmd;
+			// TODO: Update color
 			m_mainworker.PushAndWaitRxMessage(this, (const unsigned char *)&ycmd, NULL, -1);
 		}
 	}
@@ -284,8 +287,17 @@ bool Yeelight::WriteToHardware(const char *pdata, const unsigned char length)
 		break;
 	case Limitless_SetRGBColour: {
 			sendOnFirst = true;
-			float cHue = (359.0f / 255.0f)*float(pLed->value); // hue given was in range of 0-255
-			ss << "{\"id\":1,\"method\":\"set_hsv\",\"params\":[" << cHue << ", 100, \"smooth\", 2000]}\r\n";
+			// Convert RGB to HSV
+			int rgb = (int(pLed->color.r*255.0f) << 16) + (int(pLed->color.g*255.0f) << 8) + (pLed->color.b*255.0f);
+			ss << "{\"id\":1,\"method\":\"set_rgb\",\"params\":[" << rgb << ", \"smooth\", 2000]}\r\n";
+			message = ss.str();
+		}
+		break;
+	case Limitless_SetKelvinLevel: {
+			sendOnFirst = true;
+			// Convert temperature to Kelvin 1700..6500
+			int kelvin = (int(pLed->color.t*(6500.0f-1700.0f))) + 1700;
+			ss << "{\"id\":1,\"method\":\"set_rgb\",\"params\":[" << kelvin << ", \"smooth\", 2000]}\r\n";
 			message = ss.str();
 		}
 		break;
@@ -313,7 +325,6 @@ bool Yeelight::WriteToHardware(const char *pdata, const unsigned char length)
 		break;
 	case Limitless_FullBrightness: {
 			sendOnFirst = true;
-			int value = pLed->value;
 			ss << "{\"id\":1,\"method\":\"set_bright\",\"params\":[100, \"smooth\", 500]}\r\n";
 			message = ss.str();
 		}
@@ -454,8 +465,24 @@ bool Yeelight::udp_server::HandleIncoming(const std::string &szData, std::vector
 	if (!YeeLightGetTag(szData, "bright: ", yeelightBright))
 		return false;
 
+	std::string yeelightColorMode;
+	if (!YeeLightGetTag(szData, "color_mode: ", yeelightColorMode))
+		return false;
+
 	std::string yeelightHue;
 	if (!YeeLightGetTag(szData, "hue: ", yeelightHue))
+		return false;
+
+	std::string yeelightSat;
+	if (!YeeLightGetTag(szData, "sat: ", yeelightSat))
+		return false;
+
+	std::string yeelightRGB;
+	if (!YeeLightGetTag(szData, "rgb: ", yeelightRGB))
+		return false;
+
+	std::string yeelightCT;
+	if (!YeeLightGetTag(szData, "ct: ", yeelightCT))
 		return false;
 
 	bool bIsOn = false;
@@ -468,12 +495,16 @@ bool Yeelight::udp_server::HandleIncoming(const std::string &szData, std::vector
 	if (yeelightModel == "mono") {
 		yeelightName = "YeeLight LED (Mono)";
 	}
-	else if ((yeelightModel == "color") || (yeelightModel == "stripe")) {
-		yeelightName = "YeeLight LED (Color)";
+	else if (yeelightModel == "stripe") {
+		yeelightName = "YeeLight LED (Stripe)";
 		sType = sTypeLimitlessRGBW;
 	}
+	else if (yeelightModel == "color") {
+		yeelightName = "YeeLight LED (Color)";
+		sType = sTypeLimitlessRGBWW;
+	}
 	Yeelight yeelight(hardwareId);
-	yeelight.InsertUpdateSwitch(yeelightId, yeelightName, sType, yeelightLocation, bIsOn, yeelightBright, yeelightHue);
+	yeelight.InsertUpdateSwitch(yeelightId, yeelightName, sType, yeelightLocation, bIsOn, yeelightBright, yeelightHue, yeelightSat, yeelightRGB, yeelightCT, yeelightColorMode);
 	return true;
 }
 
@@ -500,7 +531,7 @@ namespace http {
 			int HwdID = atoi(idx.c_str());
 
 			Yeelight yeelight(HwdID);
-			yeelight.InsertUpdateSwitch("123", sname, (stype == "0") ? sTypeLimitlessWhite : sTypeLimitlessRGBW, sipaddress, false, "0", "0");
+			yeelight.InsertUpdateSwitch("123", sname, (stype == "0") ? sTypeLimitlessWhite : sTypeLimitlessRGBW, sipaddress, false, "0", "0", "", "", "", "");
 		}
 	}
 }

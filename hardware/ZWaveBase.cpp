@@ -1053,8 +1053,9 @@ bool ZWaveBase::WriteToHardware(const char *pdata, const unsigned char length)
 			else if (pLed->command == Limitless_SetRGBColour)
 			{
 				int red, green, blue;
-				float cHue = (360.0f / 255.0f)*float(pLed->value);//hue given was in range of 0-255
-				hue2rgb(cHue, red, green, blue);
+				red = round(pLed->color.r*255.0f);
+				green = round(pLed->color.g*255.0f);
+				blue = round(pLed->color.b*255.0f);
 
 				instanceID = 6;//white
 				if (!SwitchLight(nodeID, instanceID, pDevice->commandClassID, 0))
@@ -1114,16 +1115,18 @@ bool ZWaveBase::WriteToHardware(const char *pdata, const unsigned char length)
 				}
 				else if (pLed->command == Limitless_SetRGBColour)
 				{
-					int red, green, blue;
-					float cHue = (360.0f / 255.0f)*float(pLed->value & 0xFFFF);//hue given was in range of 0-255
+					int red, green, blue, wWhite, cWhite;
 
-					int Brightness = 100;
+					float Brightness = 100; // TODO: Include master brightness in Limitless_SetRGBColour?
+					float dMax = round((255.0f / 100.0f)*Brightness);
 
-					int dMax = round((255.0f / 100.0f)*float(Brightness));
-					hue2rgb(cHue, red, green, blue, dMax);
+					red    = round(pLed->color.r*dMax);
+					green  = round(pLed->color.g*dMax);
+					blue   = round(pLed->color.b*dMax);
+					wWhite = round(pLed->color.ww*dMax);
+					wWhite = round(pLed->color.cw*dMax);
+
 					instanceID = 1;
-					int wWhite = (pLed->value >> 16);
-					int cWhite = 0;// (pLed->value >> 16);
 					sstr << "#"
 						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << red
 						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << green
@@ -1136,7 +1139,34 @@ bool ZWaveBase::WriteToHardware(const char *pdata, const unsigned char length)
 					if (!SwitchColor(nodeID, instanceID, COMMAND_CLASS_COLOR_CONTROL, sColor))
 						return false;
 
-					_log.Log(LOG_NORM, "Red: %03d, Green:%03d, Blue:%03d", red, green, blue);
+					_log.Log(LOG_NORM, "Red: %03d, Green:%03d, Blue:%03d, wWhite:%03d, cWhite:%03d", red, green, blue, wWhite, cWhite);
+					return true;
+				}
+				else if (pLed->command == Limitless_SetKelvinLevel)
+				{
+					int wWhite, cWhite;
+
+					float Brightness = 100; // TODO: Include master brightness in Limitless_SetRGBColour / Limitless_SetKelvinLevel?
+					float dMax = round((255.0f / 100.0f)*Brightness);
+
+					// TODO: Calculate ww and cw based on color.t
+					wWhite = round(pLed->color.ww*dMax);
+					wWhite = round(pLed->color.cw*dMax);
+
+					instanceID = 1;
+					sstr << "#"
+						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << 0
+						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << 0
+						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << 0
+						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << wWhite
+						<< std::setw(2) << std::uppercase << std::hex << std::setfill('0') << std::hex << cWhite;
+
+					std::string sColor = sstr.str();
+
+					if (!SwitchColor(nodeID, instanceID, COMMAND_CLASS_COLOR_CONTROL, sColor))
+						return false;
+
+					_log.Log(LOG_NORM, "wWhite:%03d, cWhite:%03d", wWhite, cWhite);
 					return true;
 				}
 			}

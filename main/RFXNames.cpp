@@ -774,6 +774,8 @@ const char *RFX_Type_SubType_Desc(const unsigned char dType, const unsigned char
 		{ pTypeLimitlessLights, sTypeLimitlessWhite, "White" },
 		{ pTypeLimitlessLights, sTypeLimitlessRGBWW, "RGBWW" },
 		{ pTypeLimitlessLights, sTypeLimitlessLivCol, "LivCol" },
+		{ pTypeLimitlessLights, sTypeLimitlessRGBWZ, "RGBWZ" },
+		{ pTypeLimitlessLights, sTypeLimitlessRGBWWZ, "RGBWWZ" },
 
 		{ pTypeRFY, sTypeRFY, "RFY" },
 		{ pTypeRFY, sTypeRFY2, "RFY2" },

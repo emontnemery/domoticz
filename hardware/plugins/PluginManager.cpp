@@ -531,7 +531,7 @@ namespace http {
 				Plugins::CPlugin*	pPlugin = (Plugins::CPlugin*)(*PluginHwd)[HwID];
 				if (pPlugin)
 				{
-					pPlugin->SendCommand(Unit, sAction, 0, 0);
+					pPlugin->SendCommand(Unit, sAction, 0, NoColor);
 				}
 			}
 		}

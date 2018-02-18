@@ -999,8 +999,6 @@ bool eHouseTCP::WriteToHardware(const char *pdata, const unsigned char length)
 		int red, green, blue;
 		if (cmd == Limitless_SetRGBColour)
 		{
-			float cHue = (360.0f / 255.0f) * float(pLed->value);//hue given was in range of 0-255
-			hue2rgb(cHue, red, green, blue);
 			AddrH = id >> 24;              //address high
 			AddrL = (id >> 16) & 0xff;     //address low
 			gettype(AddrH, AddrL);
@@ -1011,9 +1009,9 @@ bool eHouseTCP::WriteToHardware(const char *pdata, const unsigned char length)
 			ev[1] = AddrL;
 			ev[2] = 4;					//SET DIMMER
 			ev[3] = nr;					//starting channel
-			red = (red * 255) / 100;
-			green = (green * 255) / 100;
-			blue = (blue * 255) / 100;
+			red   = round(pLed->color.r*255.0f);
+			green = round(pLed->color.g*255.0f);
+			blue  = round(pLed->color.b*255.0f);
 			ev[4] = (unsigned char)red;
 			ev[5] = (unsigned char)green;
 			ev[6] = (unsigned char)blue;

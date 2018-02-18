@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../main/Helper.h"
+#include "../json/json.h"
+
 #define sTypeDomoticzSecurity 0x83
 #define sTypeSmartwaresSwitchRadiator 0x84
 
@@ -28,11 +31,13 @@
 #define bmpbaroforecast_rain			0x06 //when forecast was cloudy and pressure is below 1010 we have 50%+ change of rain
 
 #define pTypeLimitlessLights	0xF1
-#define sTypeLimitlessRGBW		0x01
-#define sTypeLimitlessRGB		0x02
-#define sTypeLimitlessWhite		0x03
-#define sTypeLimitlessRGBWW		0x04
+#define sTypeLimitlessRGBW		0x01 // RGB + white, either RGB or white can be lit
+#define sTypeLimitlessRGB		0x02 // RGB
+#define sTypeLimitlessWhite		0x03 // Warm white + Cold white (??), used in Limitless.cpp as Warm white + Cold white, but in Yeelight.cpp as simple dimmer
+#define sTypeLimitlessRGBWW		0x04 // RGB + warm white + cold white, either RGB or white can be lit
 #define sTypeLimitlessLivCol	0x05
+#define sTypeLimitlessRGBWZ		0x06 // Like RGBW, but allows combining RGB and white
+#define sTypeLimitlessRGBWWZ	0x07 // Like RGBWW, but allows combining RGB and white
 
 #define pTypeThermostat			0xF2
 #define sTypeThermSetpoint		0x01
@@ -495,6 +500,177 @@ typedef struct _tP1Gas {
 	}
 } P1Gas;
 
+typedef struct _tColor {
+	bool valid;  // true if the color data is valid
+	bool white;  // If true, only t (color temperature) is valid, if false, r, g, b, cw, ww are valid but not t
+	float level; // Range:0..1, Master brightness (for future use)
+	float t;     // Range:0..1, Color temperature (warm / cold ratio, 0 is coldest, 1 is warmest)
+	float r;     // Range:0..1, Red level
+	float g;     // Range:0..1, Green level
+	float b;     // Range:0..1, Blue level
+	float cw;    // Range:0..1, Warm white level
+	float ww;    // Range:0..1, Cold white level
+
+	_tColor()
+	{
+		level = t = r = g = b = cw = ww = 0;
+		valid = false;
+		white = false;
+	}
+
+	explicit _tColor(const std::string sRaw, bool fixed_point) //explicit to avoid unintentional conversion of string to _tColor
+	{
+		if (fixed_point)
+		{
+			fromJSONfixedpoint(sRaw);
+		}
+		else
+		{
+			fromJSONfloat(sRaw);
+		}
+	}
+
+	explicit _tColor(const uint8_t ir, const uint8_t ig, const uint8_t ib, const uint8_t icw, const uint8_t iww, const uint8_t ilevel)
+	{
+		valid = true;
+		white = false;
+		r=ir/255.0f; g=ig/255.0f; b=ib/255.0f; cw=icw/255.0f; ww=iww/255.0f; level=ilevel/255.0f;
+	}
+
+	explicit _tColor(const float ir, const float ig, const float ib, const float icw, const float iww, const float ilevel)
+	{
+		valid = true;
+		white = false;
+		r=ir; g=ig; b=ib; cw=icw; ww=iww; level=ilevel;
+	}
+
+	explicit _tColor(float it) //explicit to avoid unintentional conversion of numeral to _tColor
+	{
+		_tColor();
+		valid = true;
+		white = true;
+		ww = (it);
+		cw = (1.0f-it);
+		t=it;
+	}
+
+	std::string getrgbwwhex() const
+	{
+		char tmp[13];
+		snprintf(tmp, sizeof(tmp), "%02x%02x%02x%02x%02x", (int) round(r*255), (int) round(g*255), (int) round(b*255), (int) round(cw*255), (int) round(ww*255));
+		return std::string(tmp);
+	}
+
+	void fromJSONfloat(std::string s)
+	{
+		Json::Value root;
+		Json::Reader reader(Json::Features::strictMode());
+		valid = false;
+		try {
+			bool parsingSuccessful = reader.parse(s.c_str(), root);     //parse process
+			if ( !parsingSuccessful )
+			{
+				valid = false;
+				return;
+			}
+			valid = true;
+			white = root.get("w", 0).asBool();
+			t = root.get("t", 0).asFloat();
+			r = root.get("r", 0).asFloat();
+			g = root.get("g", 0).asFloat();
+			b = root.get("b", 0).asFloat();
+			cw = root.get("cw", 0).asFloat();
+			ww = root.get("ww", 0).asFloat();
+			level = root.get("l", 0).asFloat();
+		}
+		catch (...) {
+		}
+	}
+
+	void fromJSONfixedpoint(std::string s)
+	{
+		Json::Value root;
+		Json::Reader reader(Json::Features::strictMode());
+		valid = false;
+		try {
+			bool parsingSuccessful = reader.parse(s.c_str(), root);     //parse process
+			if ( !parsingSuccessful )
+			{
+				valid = false;
+				return;
+			}
+			valid = true;
+			white = root.get("w", 0).asBool();
+			t = fixedpointToFloat(root.get("t", 0).asInt());
+			r = fixedpointToFloat(root.get("r", 0).asInt());
+			g = fixedpointToFloat(root.get("g", 0).asInt());
+			b = fixedpointToFloat(root.get("b", 0).asInt());
+			cw = fixedpointToFloat(root.get("cw", 0).asInt());
+			ww = fixedpointToFloat(root.get("ww", 0).asInt());
+			level = fixedpointToFloat(root.get("l", 0).asInt());
+		}
+		catch (...) {
+		}
+	}
+
+	std::string toJSONfloat() const
+	{
+		// TODO: If color not valid, return empty string?
+		Json::Value root;
+		root["w"] = white;
+		root["l"] = level;
+		root["t"] = t;
+		root["r"] = r;
+		root["g"] = g;
+		root["b"] = b;
+		root["cw"] = cw;
+		root["ww"] = ww;
+
+		Json::FastWriter fastwriter;
+		fastwriter.omitEndingLineFeed();
+		return fastwriter.write(root);
+	}
+
+	std::string toJSONfixedpoint() const
+	{
+		// TODO: If color not valid, return empty string?
+		Json::Value root;
+		root["w"] = white;
+		root["l"] = floatToFixedpoint(level);
+		root["t"] = floatToFixedpoint(t);
+		root["r"] = floatToFixedpoint(r);
+		root["g"] = floatToFixedpoint(g);
+		root["b"] = floatToFixedpoint(b);
+		root["cw"] = floatToFixedpoint(cw);
+		root["ww"] = floatToFixedpoint(ww);
+
+		Json::FastWriter fastwriter;
+		fastwriter.omitEndingLineFeed();
+		return fastwriter.write(root);
+	}
+
+	float fixedpointToFloat(const int val) const
+	{
+		if (val<0) return -1.0f;
+		int tmp = val;
+		tmp = std::min(255, tmp);
+		tmp = std::max(0, tmp);
+		return (tmp / 255.0f);
+	}
+
+	int floatToFixedpoint(const float val) const
+	{
+		if (val<0) return -1;
+		int fpval = val * 255.0f;
+		fpval = std::min(255, fpval);
+		fpval = std::max(0, fpval);
+		return fpval;
+	}
+
+} _tColor;
+
+const _tColor NoColor = _tColor();
+
 typedef struct _tLimitlessLights {
 	uint8_t len;
 	uint8_t type;
@@ -502,7 +678,8 @@ typedef struct _tLimitlessLights {
 	uint32_t id;
 	uint8_t dunit; //0=All, 1=Group1,2=Group2,3=Group3,4=Group4, 5=IboxLed
 	uint8_t command;
-	uint32_t value; //Hue, or later RGBW
+	uint32_t value;  // Value of command
+	_tColor color;   // Color
 	_tLimitlessLights()
 	{
 		id = 1;
@@ -512,6 +689,7 @@ typedef struct _tLimitlessLights {
 		subtype=sTypeLimitlessRGBW;
 		command=0;
 		value=0;
+		color=NoColor;
 	}
 } _tLimitlessLights;
 

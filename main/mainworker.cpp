@@ -5560,6 +5560,7 @@ void MainWorker::decode_HomeConfort(const int HwdID, const _eHardwareTypes HwdTy
 
 void MainWorker::decode_LimitlessLights(const int HwdID, const _eHardwareTypes HwdType, const tRBUF *pResponse, _tRxMessageProcessingResult & procResult)
 {
+	_log.Log(LOG_ERROR, "MAIN decode_LimitlessLights");
 	char szTmp[300];
 	_tLimitlessLights *pLed = (_tLimitlessLights*)pResponse;
 
@@ -5572,16 +5573,18 @@ void MainWorker::decode_LimitlessLights(const int HwdID, const _eHardwareTypes H
 	std::string ID = szTmp;
 	unsigned char Unit = pLed->dunit;
 	unsigned char cmnd = pLed->command;
-	unsigned char value = pLed->value;
+	uint32_t value = pLed->value;
+	_tColor color = pLed->color;
 
 	char szValueTmp[100];
-	sprintf(szValueTmp, "%d", value);
+	sprintf(szValueTmp, "%u", value);
 	std::string sValue = szValueTmp;
 	uint64_t DevRowIdx = m_sql.UpdateValue(HwdID, ID.c_str(), Unit, devType, subType, 12, -1, cmnd, sValue.c_str(), procResult.DeviceName);
 	if (DevRowIdx == -1)
 		return;
 	CheckSceneCode(DevRowIdx, devType, subType, cmnd, szTmp);
 
+	// TODO: Why don't we let database update be handled by CSQLHelper::UpdateValue?
 	if (cmnd == Limitless_SetBrightnessLevel)
 	{
 		std::vector<std::vector<std::string> > result;
@@ -5598,6 +5601,30 @@ void MainWorker::decode_LimitlessLights(const int HwdID, const _eHardwareTypes H
 			m_sql.safe_query(
 				"UPDATE DeviceStatus SET LastLevel='%d' WHERE (ID = %" PRIu64 ")",
 				value,
+				ulID);
+		}
+
+	}
+
+	if (cmnd == Limitless_SetRGBColour || cmnd == Limitless_SetKelvinLevel)
+	{
+		_log.Log(LOG_ERROR, "MAIN decode_LimitlessLights Limitless_SetRGBColour or Limitless_SetKelvinLevel");
+
+		std::vector<std::vector<std::string> > result;
+		result = m_sql.safe_query(
+			"SELECT ID,Name FROM DeviceStatus WHERE (HardwareID=%d AND DeviceID='%q' AND Unit=%d AND Type=%d AND SubType=%d)",
+			HwdID, ID.c_str(), Unit, devType, subType);
+		if (result.size() != 0)
+		{
+			uint64_t ulID;
+			std::stringstream s_str(result[0][0]);
+			s_str >> ulID;
+
+			//store color in database
+			_log.Log(LOG_ERROR, "MAIN decode_LimitlessLights update Color to %s", color.getrgbwwhex().c_str());
+			m_sql.safe_query(
+				"UPDATE DeviceStatus SET Color='%q' WHERE (ID = %" PRIu64 ")",
+				color.toJSONfloat().c_str(),
 				ulID);
 		}
 
@@ -10844,7 +10871,7 @@ bool MainWorker::SetRFXCOMHardwaremodes(const int HardwareID, const unsigned cha
 	return true;
 }
 
-bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string switchcmd, int level, int hue, const bool IsTesting)
+bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string switchcmd, int level, _tColor color, const bool IsTesting)
 {
 	unsigned long ID;
 	std::stringstream s_strid;
@@ -10938,7 +10965,7 @@ bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string 
 	if (pHardware->HwdType == HTYPE_PythonPlugin)
 	{
 #ifdef ENABLE_PYTHON
-		((Plugins::CPlugin*)m_hardwaredevices[hindex])->SendCommand(Unit, switchcmd, level, hue);
+		((Plugins::CPlugin*)m_hardwaredevices[hindex])->SendCommand(Unit, switchcmd, level, color); //TODO: Fix python plugin API to accept color
 #endif
 		return true;
 	}
@@ -11164,10 +11191,10 @@ bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string 
 		{
 			if (switchcmd != "Off")
 			{
-				if ((hue != -1) && (hue != 1000))
+				//if ((hue != -1) && (hue != 1000)) // TODO: Fix TRC02
 				{
 					double dval;
-					dval = (255.0 / 360.0)*float(hue);
+					//dval = (255.0 / 360.0)*float(hue); TODO: Fix TRC02
 					oldlevel = round(dval);
 					switchcmd = "Set Color";
 				}
@@ -11192,6 +11219,7 @@ bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string 
 
 				if (switchcmd == "Set Color")
 				{
+					//TODO: Fix TRC02
 					if ((oldlevel != -1) && (oldlevel != 1000))
 					{
 						double dval;
@@ -11301,9 +11329,10 @@ bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string 
 		lcmd.id = ID;
 		lcmd.dunit = Unit;
 
+		//TODO: Serialization to two multiple commands should not be done here, should be done by HW driver if needed due to HW limitations
 		if ((switchcmd == "On") || (switchcmd == "Set Level"))
 		{
-			if (hue != -1)
+			if (color.valid)
 			{
 				_tLimitlessLights lcmd2;
 				lcmd2.len = sizeof(_tLimitlessLights) - 1;
@@ -11311,26 +11340,27 @@ bool MainWorker::SwitchLightInt(const std::vector<std::string> &sd, std::string 
 				lcmd2.subtype = dSubType;
 				lcmd2.id = ID;
 				lcmd2.dunit = Unit;
-				if (hue != 1000)
+				if (!color.white)
 				{
-					double dval;
-					dval = (255.0 / 360.0)*float(hue & 0xFFFF);
-					int ival;
-					ival = round(dval);
-					lcmd2.value = (hue & 0xFF0000) | ival;
+					lcmd2.color = color;
 					lcmd2.command = Limitless_SetRGBColour;
 				}
 				else
 				{
-					lcmd2.command = Limitless_SetColorToWhite;
+					//TODO: OK to set Kelvin?
+					//lcmd2.command = Limitless_SetColorToWhite;
+					lcmd2.command = Limitless_SetKelvinLevel;
 				}
+				_log.Log(LOG_ERROR, "MAIN pTypeLimitlessLights, color %s", color.getrgbwwhex().c_str());
 				if (!WriteToHardware(HardwareID, (const char*)&lcmd2, sizeof(_tLimitlessLights)))
 					return false;
 				sleep_milliseconds(100);
 			}
 		}
 
+		lcmd.color = color;
 		lcmd.value = level;
+		_log.Log(LOG_ERROR, "MAIN pTypeLimitlessLights2, color: %s, level: %d", color.getrgbwwhex().c_str(), level);
 		if (!GetLightCommand(dType, dSubType, switchtype, switchcmd, lcmd.command, options))
 			return false;
 		if (!WriteToHardware(HardwareID, (const char*)&lcmd, sizeof(_tLimitlessLights)))
@@ -11847,7 +11877,7 @@ bool MainWorker::SwitchModal(const std::string &idx, const std::string &status, 
 	return true;
 }
 
-bool MainWorker::SwitchLight(const std::string &idx, const std::string &switchcmd, const std::string &level, const std::string &hue, const std::string &ooc, const int ExtraDelay)
+bool MainWorker::SwitchLight(const std::string &idx, const std::string &switchcmd, const std::string &level, const std::string &color, const std::string &ooc, const int ExtraDelay)
 {
 	uint64_t ID;
 	std::stringstream s_str(idx);
@@ -11855,11 +11885,12 @@ bool MainWorker::SwitchLight(const std::string &idx, const std::string &switchcm
 	int ilevel = -1;
 	if (level != "")
 		ilevel = atoi(level.c_str());
-
-	return SwitchLight(ID, switchcmd, ilevel, atoi(hue.c_str()), atoi(ooc.c_str()) != 0, ExtraDelay);
+	_tColor ocolor(color, false); // false: json string with colors as floats
+	_log.Log(LOG_ERROR, "MainWorker::SwitchLight JSON:'%s', color.valid:%u", color.c_str(), ocolor.valid);
+	return SwitchLight(ID, switchcmd, ilevel, /*_tColor(color)*/ocolor, atoi(ooc.c_str()) != 0, ExtraDelay);
 }
 
-bool MainWorker::SwitchLight(const uint64_t idx, const std::string &switchcmd, const int level, const int hue, const bool ooc, const int ExtraDelay)
+bool MainWorker::SwitchLight(const uint64_t idx, const std::string &switchcmd, const int level, _tColor color, const bool ooc, const int ExtraDelay)
 {
 	//Get Device details
 	if (_log.isTraceEnabled()) _log.Log(LOG_TRACE, "MAIN SwitchLight idx:%" PRId64 " cmd:%s lvl:%d ", idx, switchcmd.c_str(), level);
@@ -11885,7 +11916,7 @@ bool MainWorker::SwitchLight(const uint64_t idx, const std::string &switchcmd, c
 	if (ooc)//Only on change
 	{
 		int nNewVal = bIsOn ? 1 : 0;//Is that everything we need here
-		if ((switchtype == STYPE_Selector) && (nValue == nNewVal) && (level == atoi(sValue.c_str()))) {
+		if ((switchtype == STYPE_Selector) && (nValue == nNewVal) && (level == atoi(sValue.c_str()))) { // TODO: Check color change, implement operator== and blah blah
 			return true;
 		}
 		else if (nValue == nNewVal) {
@@ -11899,11 +11930,11 @@ bool MainWorker::SwitchLight(const uint64_t idx, const std::string &switchcmd, c
 		{
 			_log.Log(LOG_NORM, "Delaying switch [%s] action (%s) for %d seconds", devName.c_str(), switchcmd.c_str(), ExtraDelay);
 		}
-		m_sql.AddTaskItem(_tTaskItem::SwitchLightEvent(static_cast<float>(iOnDelay + ExtraDelay), idx, switchcmd, level, hue, "Switch with Delay"));
+		m_sql.AddTaskItem(_tTaskItem::SwitchLightEvent(static_cast<float>(iOnDelay + ExtraDelay), idx, switchcmd, level, color, "Switch with Delay"));
 		return true;
 	}
 	else
-		return SwitchLightInt(sd, switchcmd, level, hue, false);
+		return SwitchLightInt(sd, switchcmd, level, color, false);
 }
 
 bool MainWorker::SetSetPoint(const std::string &idx, const float TempValue, const std::string &newMode, const std::string &until)
@@ -12524,7 +12555,7 @@ bool MainWorker::SwitchScene(const uint64_t idx, std::string switchcmd)
 
 	//now switch all attached devices, and only the onces that do not trigger a scene
 	result = m_sql.safe_query(
-		"SELECT DeviceRowID, Cmd, Level, Hue, OnDelay, OffDelay FROM SceneDevices WHERE (SceneRowID == %" PRIu64 ") ORDER BY [Order] ASC", idx);
+		"SELECT DeviceRowID, Cmd, Level, Color, OnDelay, OffDelay FROM SceneDevices WHERE (SceneRowID == %" PRIu64 ") ORDER BY [Order] ASC", idx);
 	if (result.size() < 1)
 		return true; //no devices in the scene
 
@@ -12535,7 +12566,7 @@ bool MainWorker::SwitchScene(const uint64_t idx, std::string switchcmd)
 
 		int cmd = atoi(sd[1].c_str());
 		int level = atoi(sd[2].c_str());
-		int hue = atoi(sd[3].c_str());
+		_tColor color(sd[3], false); // false, JSON data is float
 		int ondelay = atoi(sd[4].c_str());
 		int offdelay = atoi(sd[5].c_str());
 		std::vector<std::vector<std::string> > result2;
@@ -12612,7 +12643,7 @@ bool MainWorker::SwitchScene(const uint64_t idx, std::string switchcmd)
 				int delay = (lstatus == "Off") ? offdelay : ondelay;
 				if (m_sql.m_bEnableEventSystem && !bEventTrigger)
 					m_eventsystem.SetEventTrigger(idx, m_eventsystem.REASON_DEVICE, static_cast<float>(delay));
-				SwitchLight(idx, lstatus, ilevel, hue, false, delay);
+				SwitchLight(idx, lstatus, ilevel, color, false, delay);
 				if (scenetype == SGTYPE_SCENE)
 				{
 					if ((lstatus != "Off") && (offdelay > 0))
@@ -12620,7 +12651,7 @@ bool MainWorker::SwitchScene(const uint64_t idx, std::string switchcmd)
 						//switch with on delay, and off delay
 						if (m_sql.m_bEnableEventSystem && !bEventTrigger)
 							m_eventsystem.SetEventTrigger(idx, m_eventsystem.REASON_DEVICE, static_cast<float>(ondelay + offdelay));
-						SwitchLight(idx, "Off", ilevel, hue, false, ondelay + offdelay);
+						SwitchLight(idx, "Off", ilevel, color, false, ondelay + offdelay);
 					}
 				}
 			}
@@ -12628,7 +12659,7 @@ bool MainWorker::SwitchScene(const uint64_t idx, std::string switchcmd)
 			{
 				if (m_sql.m_bEnableEventSystem && !bEventTrigger)
 					m_eventsystem.SetEventTrigger(idx, m_eventsystem.REASON_DEVICE, static_cast<float>(ondelay));
-				SwitchLight(idx, "On", ilevel, hue, false, ondelay);
+				SwitchLight(idx, "On", ilevel, color, false, ondelay);
 			}
 			sleep_milliseconds(50);
 		}

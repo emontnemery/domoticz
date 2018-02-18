@@ -534,10 +534,12 @@ bool CLimitLess::WriteToHardware(const char *pdata, const unsigned char length)
 					pCMD = (unsigned char*)&V6_Bridge_SetColor;
 				else
 					pCMD = (unsigned char*)&V6_RGBWW_SetColor;
-				pCMD[0x05] = pLed->value;
-				pCMD[0x06] = pLed->value;
-				pCMD[0x07] = pLed->value;
-				pCMD[0x08] = pLed->value;
+				float hsb[3];
+				rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+				pCMD[0x05] = hsb[0]*255.0f;
+				pCMD[0x06] = hsb[0]*255.0f;
+				pCMD[0x07] = hsb[0]*255.0f;
+				pCMD[0x08] = hsb[0]*255.0f;
 				if (pLed->dunit != 5)
 					pCMD[0x09] = pLed->dunit;
 				break;
@@ -571,7 +573,7 @@ bool CLimitLess::WriteToHardware(const char *pdata, const unsigned char length)
 
 					pCMD = (unsigned char*)&V6_RGBWW_SetKelvinLevel;
 					//pCMD[0x05] = tmpValue[0];
-					pCMD[0x05] = pLed->value;
+					pCMD[0x05] = pLed->color.t*255.0f;
 					pCMD[0x09] = pLed->dunit;
 				}
 				break;
@@ -893,10 +895,12 @@ bool CLimitLess::WriteToHardware(const char *pdata, const unsigned char length)
 					pCMD = (unsigned char*)&V6_Bridge_SetColor;
 				else
 					pCMD = (unsigned char*)&V6_RGBW_SetColor;
-				pCMD[0x05] = pLed->value;
-				pCMD[0x06] = pLed->value;
-				pCMD[0x07] = pLed->value;
-				pCMD[0x08] = pLed->value;
+				float hsb[3];
+				rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+				pCMD[0x05] = hsb[0]*255.0f;
+				pCMD[0x06] = hsb[0]*255.0f;
+				pCMD[0x07] = hsb[0]*255.0f;
+				pCMD[0x08] = hsb[0]*255.0f;
 				if (pLed->dunit != 5)
 					pCMD[0x09] = pLed->dunit;
 				break;
@@ -1378,8 +1382,12 @@ bool CLimitLess::WriteToHardware(const char *pdata, const unsigned char length)
 				sendto(m_RemoteSocket, (const char*)&RGBWGroup4AllOn, 3, 0, (struct sockaddr*)&m_stRemoteDestAddr, sizeof(sockaddr_in));
 				sleep_milliseconds(100);
 			}
+			// Convert RGB to HSV
+			float hsb[3];
+			rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+			int iHue = hsb[0]*255.0f;
 			//The Hue is inverted/swifted 90 degrees
-			int iHue = ((255 - pLed->value) + 192) & 0xFF;
+			iHue = ((255 - iHue) + 192) & 0xFF;
 			RGBWSetColor[1] = (unsigned char)iHue;
 			pCMD = (unsigned char*)&RGBWSetColor;
 		}
@@ -1903,8 +1911,12 @@ bool CLimitLess::WriteToHardware(const char *pdata, const unsigned char length)
 			//First send ON , sleep 100ms, then the command
 			sendto(m_RemoteSocket, (const char*)&RGBOn, 3, 0, (struct sockaddr*)&m_stRemoteDestAddr, sizeof(sockaddr_in));
 			sleep_milliseconds(100);
+			// Convert RGB to HSV
+			float hsb[3];
+			rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+			int iHue = hsb[0]*255.0f;
 			//The Hue is inverted/swifted 90 degrees
-			int iHue = ((255 - pLed->value) + 192) & 0xFF;
+			iHue = ((255 - iHue) + 192) & 0xFF;
 			RGBSetColour[1] = (unsigned char)iHue;
 			pCMD = (unsigned char*)&RGBSetColour;
 		}

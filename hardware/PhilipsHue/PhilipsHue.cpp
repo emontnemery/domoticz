@@ -10,6 +10,8 @@
 #include "../../main/WebServer.h"
 #include "../../webserver/cWebem.h"
 #include "../../httpclient/HTTPClient.h"
+//Workaround for tasmota bug
+#include "../../httpclient/UrlEncode.h"
 #include "../../json/json.h"
 #include "../hardwaretypes.h"
 #include <boost/make_shared.hpp>
@@ -138,6 +140,8 @@ bool CPhilipsHue::WriteToHardware(const char *pdata, const unsigned char length)
 	//unsigned char subtype = pSen->ICMND.subtype;
 
 	int svalue = 0;
+	int svalue2 = 0;
+	int svalue3 = 0;
 	string LCmd = "";
 	int nodeID = 0;
 
@@ -192,6 +196,7 @@ bool CPhilipsHue::WriteToHardware(const char *pdata, const unsigned char length)
 				//Off
 				LCmd = "Off";
 				svalue = 0;
+				_log.Log(LOG_ERROR, "Philips Hue: turn off");
 				SwitchLight(nodeID, LCmd, svalue);
 			}
 			else
@@ -201,6 +206,7 @@ bool CPhilipsHue::WriteToHardware(const char *pdata, const unsigned char length)
 				if (fvalue > 255.0f)
 					fvalue = 255.0f;
 				svalue = round(fvalue);
+				_log.Log(LOG_ERROR, "Philips Hue: set level: %03u", svalue);
 				SwitchLight(nodeID, LCmd, svalue);
 			}
 			return true;
@@ -213,17 +219,31 @@ bool CPhilipsHue::WriteToHardware(const char *pdata, const unsigned char length)
 		}
 		else if (pLed->command == Limitless_SetRGBColour)
 		{
-			float cHue = (65535.0f / 255.0f)*float(pLed->value);//hue given was in range of 0-255
+			float hsb[3];
+			rgb2hsb(pLed->color.r*255.0f, pLed->color.g*255.0f, pLed->color.b*255.0f, hsb);
+			float cHue = (65535.0f)*hsb[0]; // Scale hue from 0..1 to 0..65535
+			float cSat = (255.0f)*hsb[1];   // Scale saturation from 0..1 to 0..255
+			float cBri = (255.0f)*hsb[2];   // Scale brightness from 0..1 to 0..255
 			LCmd = "Set Hue";
 			svalue = round(cHue);
-			SwitchLight(nodeID, LCmd, svalue);
+			svalue2 = round(cSat);
+			//svalue3 = round(cBri); //TODO: Include master level as 'value'
+			_log.Log(LOG_ERROR, "Philips Hue: r: %02x, g: %02x, b: %02x, h: %03u, s: %03u, b: %03u", unsigned(pLed->color.r*255.0f), unsigned(pLed->color.g*255.0f), unsigned(pLed->color.b*255.0f), svalue, svalue2, svalue3);
+			SwitchLight(nodeID, LCmd, svalue, svalue2, svalue3);
 			return true;
+		}
+		else if (pLed->command == Limitless_SetKelvinLevel)
+		{
+			LCmd = "Set CT";
+			_tColor color = pLed->color;
+			svalue = round(pLed->color.t*(500.0f-153.0f)+153.0f);
+			SwitchLight(nodeID, LCmd, svalue);
 		}
 	}
 	return true;
 }
 
-bool CPhilipsHue::SwitchLight(const int nodeID, const string &LCmd, const int svalue)
+bool CPhilipsHue::SwitchLight(const int nodeID, const string &LCmd, const int svalue, const int svalue2 /*= 0*/, const int svalue3 /*= 0*/)
 {
 	vector<string> ExtraHeaders;
 	string sResult;
@@ -247,11 +267,17 @@ bool CPhilipsHue::SwitchLight(const int nodeID, const string &LCmd, const int sv
 	}
 	else if (LCmd == "Set Hue")
 	{
-		sPostData << "{\"on\": true, \"sat\": 255 , \"hue\": " << svalue << " }";
+		//TODO: include brightness from master level
+		//sPostData << "{\"on\": true, \"sat\": " << svalue2 << ", \"hue\": " << svalue << ", \"bri\": " << svalue3 << "  }";
+		sPostData << "{\"on\": true, \"sat\": " << svalue2 << ", \"hue\": " << svalue << "  }";
 	}
 	else if (LCmd == "Set Hex")
 	{
 		sPostData << "{\"on\": true, \"sat\": 255 , \"hue\": " << svalue << " }";
+	}
+	else if (LCmd == "Set CT")
+	{
+		sPostData << "{\"on\": true, \"ct\": " << svalue << " }";
 	}
 	else
 	{
@@ -298,7 +324,9 @@ bool CPhilipsHue::SwitchLight(const int nodeID, const string &LCmd, const int sv
 			<< "/groups/0/action";
 	}
 	string sURL = sstr2.str();
-	if (!HTTPClient::PUT(sURL, sPostData.str(), ExtraHeaders, sResult))
+	//Workaround for tasmota bug..
+	//if (!HTTPClient::PUT(sURL, sPostData.str(), ExtraHeaders, sResult))
+	if (!HTTPClient::GET(sURL + "?1=" + CURLEncode::URLEncode(sPostData.str()), ExtraHeaders, sResult))
 	{
 		_log.Log(LOG_ERROR, "Philips Hue: Error connecting to Hue bridge (Switch Light/Scene), (Check IPAddress/Username)");
 		return false;
@@ -368,7 +396,7 @@ string CPhilipsHue::RegisterUser(const string &IPAddress, const unsigned short P
 
 void CPhilipsHue::InsertUpdateSwitch(const int NodeID, const _eHueLightType LType, const bool bIsOn, const int BrightnessLevel, const int Sat, const int Hue, const string &Name, const string &Options)
 {
-	if (LType == HLTYPE_RGBW)
+	if (LType == HLTYPE_RGBW || LType == HLTYPE_WW || LType == HLTYPE_RGBWW)
 	{
 		char szID[10];
 		char szSValue[20];
@@ -382,10 +410,25 @@ void CPhilipsHue::InsertUpdateSwitch(const int NodeID, const _eHueLightType LTyp
 		int nvalue = 0;
 		bool tIsOn = !(bIsOn);
 		
+		unsigned sType;
+		switch (LType)
+		{
+			case HLTYPE_WW:
+				sType = sTypeLimitlessWhite;
+				break;
+			case HLTYPE_RGBWW:
+				sType = sTypeLimitlessRGBWW;
+				break;
+			case HLTYPE_RGBW:
+			default:
+				sType = sTypeLimitlessRGBW;
+				break;
+		}
+
 		//Get current nValue if exist
 		vector<vector<string> > result;
 		result = m_sql.safe_query("SELECT nValue FROM DeviceStatus WHERE (HardwareID==%d) AND (Unit==%d) AND (Type==%d) AND (SubType==%d) AND (DeviceID=='%q')",
-			m_HwdID, int(unitcode), pTypeLimitlessLights, sTypeLimitlessRGBW, szID);
+			m_HwdID, int(unitcode), pTypeLimitlessLights, sType, szID);
 
 		if (!result.empty())
 		{
@@ -402,6 +445,7 @@ void CPhilipsHue::InsertUpdateSwitch(const int NodeID, const _eHueLightType LTyp
 			lcmd.id = NodeID;
 			lcmd.command = cmd;
 			lcmd.value = BrightnessLevel;
+			lcmd.subtype = sType;
 			m_mainworker.PushAndWaitRxMessage(this, (const unsigned char *)&lcmd, Name.c_str(), 255);
 		}
 		
@@ -450,6 +494,7 @@ void CPhilipsHue::InsertUpdateSwitch(const int NodeID, const _eHueLightType LTyp
 		lcmd.id = NodeID;
 		lcmd.command = cmd;
 		lcmd.value = 0;
+		//lcmd.subtype = sType; // TODO: set type also for groups?
 		m_mainworker.PushAndWaitRxMessage(this, (const unsigned char *)&lcmd, Name.c_str(), 255);
 		
 		if (result.empty())
@@ -613,13 +658,19 @@ bool CPhilipsHue::GetLights(const Json::Value &root)
 			tlight.hue = 0; // Philips 0 - 65535, should be converted to 0 - 255 ?
 			tlight.on = light["state"]["on"].asBool();
 			bool bDoSend = true;
+
+			bool hasBri = false;
+			bool hasHueSat = false;
+			bool hasTemp = false;
+			int tbri = 0;
+
 			_eHueLightType LType = HLTYPE_NORMAL;
 	
 			if (!light["state"]["bri"].empty())
 			{
 				//Lamp with brightness control
-				LType = HLTYPE_DIM;
-				int tbri = light["state"]["bri"].asInt();
+				hasBri = true;
+				tbri = light["state"]["bri"].asInt();
 				if ((tbri != 0) && (tbri != 255))
 					tbri += 1; //hue reports 255 as 254
 				tlight.level = int((100.0f / 255.0f)*float(tbri));
@@ -627,10 +678,22 @@ bool CPhilipsHue::GetLights(const Json::Value &root)
 			if ((!light["state"]["sat"].empty()) && (!light["state"]["hue"].empty()))
 			{
 				//Lamp with hue/sat control
-				LType = HLTYPE_RGBW;
+				hasHueSat = true;
 				tlight.sat = light["state"]["sat"].asInt();
 				tlight.hue = light["state"]["hue"].asInt();
 			}
+			if (!light["state"]["ct"].empty())
+			{
+				//Lamp with color temperature control
+				hasTemp = true;
+				tlight.ct = (float(light["state"]["ct"].asInt())-153.0)/(500.0-153.0);
+			}
+
+			if (hasBri) LType = HLTYPE_DIM;
+			if (hasBri && hasHueSat && !hasTemp) LType = HLTYPE_RGBW;
+			if (hasBri && !hasHueSat && hasTemp) LType = HLTYPE_WW;
+			if (hasBri && hasHueSat && hasTemp) LType = HLTYPE_RGBWW;
+
 			if (m_lights.find(lID) != m_lights.end())
 			{
 				_tHueLight alight = m_lights[lID];
@@ -638,7 +701,8 @@ bool CPhilipsHue::GetLights(const Json::Value &root)
 					(alight.on == tlight.on) &&
 					(alight.level == tlight.level) &&
 					(alight.sat == tlight.sat) &&
-					(alight.hue == tlight.hue)
+					(alight.hue == tlight.hue) &&
+					(alight.ct == tlight.ct)
 					)
 				{
 					bDoSend = false;
@@ -647,8 +711,8 @@ bool CPhilipsHue::GetLights(const Json::Value &root)
 			m_lights[lID] = tlight;
 			if (bDoSend)
 			{
-				//_log.Log(LOG_STATUS, "HueBridge state change: tbri = %d, level = %d", tbri, tlight.level);
-				InsertUpdateSwitch(lID, LType, tlight.on, tlight.level, tlight.sat, tlight.hue, light["name"].asString(), "");
+				_log.Log(LOG_ERROR, "HueBridge state change: tbri = %d, level = %d", tbri, tlight.level);
+				InsertUpdateSwitch(lID, LType, tlight.on, tlight.level, tlight.sat, tlight.hue, light["name"].asString(), ""); //TODO: Pass color temperature
 			}
 		}
 	}
@@ -677,30 +741,44 @@ bool CPhilipsHue::GetGroups(const Json::Value &root)
 			tstate.sat = 0;
 			tstate.hue = 0;
 
+			bool hasBri = false;
+			bool hasHueSat = false;
+			bool hasTemp = false;
+
 			LType = HLTYPE_NORMAL;
-			
+
 			if (!group["action"]["on"].empty())
 				tstate.on = group["action"]["on"].asBool();
 			if (!group["action"]["bri"].empty())
 			{
+				hasBri = true;
 				int tbri = group["action"]["bri"].asInt();
 				if ((tbri != 0) && (tbri != 255))
 					tbri += 1; //hue reports 255 as 254
 				tstate.level = int((100.0f / 255.0f)*float(tbri));
-				LType = HLTYPE_DIM;
 			}
 
 			if (!group["action"]["sat"].empty())
 			{
+				hasHueSat = true;
 				tstate.sat = group["action"]["sat"].asInt();
-				LType = HLTYPE_RGBW;
 			}
 			if (!group["action"]["hue"].empty())
 			{
+				hasHueSat = true;
 				tstate.hue = group["action"]["hue"].asInt();
-				LType = HLTYPE_RGBW;
 			}
-			
+			if (!group["action"]["ct"].empty())
+			{
+				hasTemp = true;
+				tstate.ct = (float(group["action"]["ct"].asInt())-153.0)/(500.0-153.0);
+			}
+
+			if (hasBri) LType = HLTYPE_DIM;
+			if (hasBri && hasHueSat && !hasTemp) LType = HLTYPE_RGBW;
+			if (hasBri && !hasHueSat && hasTemp) LType = HLTYPE_WW;
+			if (hasBri && hasHueSat && hasTemp) LType = HLTYPE_RGBWW;
+
 			bool bDoSend = true;
 			if (m_groups.find(gID) != m_groups.end())
 			{
@@ -709,7 +787,8 @@ bool CPhilipsHue::GetGroups(const Json::Value &root)
 					(agroup.gstate.on == tstate.on) &&
 					(agroup.gstate.level == tstate.level) &&
 					(agroup.gstate.sat == tstate.sat) &&
-					(agroup.gstate.hue == tstate.hue)
+					(agroup.gstate.hue == tstate.hue) &&
+					(agroup.gstate.ct == tstate.ct)
 					)
 				{
 					bDoSend = false;

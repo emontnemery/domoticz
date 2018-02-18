@@ -89,7 +89,7 @@ const CEventSystem::_tJsonMap CEventSystem::JsonMap[] =
 	{ "HumidityStatus",		"humidityStatus",			JTYPE_STRING	},
 	{ "InternalState",		"internalState",			JTYPE_STRING	}, // door contact
 	{ "LevelActions",		"levelActions",				JTYPE_STRING	},
-	{ "LevelInt",			"levelVal",					JTYPE_INT		},
+	{ "LevelInt",			"levelVal",					JTYPE_INT		}, // TODO: Add Color
 	{ "LevelNames",			"levelNames",				JTYPE_STRING	},
 	{ "LevelOffHidden",		"levelOffHidden",			JTYPE_BOOL		},
 	{ "MaxDimLevel",		"maxDimLevel",				JTYPE_INT		},
@@ -3824,7 +3824,7 @@ bool CEventSystem::ScheduleEvent(int deviceID, std::string Action, bool isScene,
 			}
 
 		} else {
-			tItem = _tTaskItem::SwitchLightEvent( fDelayTime, deviceID, oParseResults.sCommand, level, -1, eventName );
+			tItem = _tTaskItem::SwitchLightEvent( fDelayTime, deviceID, oParseResults.sCommand, level, NoColor, eventName );
 		}
 		m_sql.AddTaskItem( tItem );
 #ifdef _DEBUG
@@ -3851,7 +3851,7 @@ bool CEventSystem::ScheduleEvent(int deviceID, std::string Action, bool isScene,
 					tDelayedtItem = _tTaskItem::SwitchSceneEvent( fDelayTime, deviceID, "On", eventName );
 				}
 			} else {
-				tDelayedtItem = _tTaskItem::SwitchLightEvent( fDelayTime, deviceID, previousState, previousLevel, -1, eventName );
+				tDelayedtItem = _tTaskItem::SwitchLightEvent( fDelayTime, deviceID, previousState, previousLevel, NoColor, eventName );
 			}
 			m_sql.AddTaskItem( tDelayedtItem );
 #ifdef _DEBUG

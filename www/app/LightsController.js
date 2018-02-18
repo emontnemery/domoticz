@@ -743,20 +743,22 @@ define(['app'], function (app) {
 				slide: function (event, ui) { //When the slider is sliding
 					clearInterval($.setColValue);
 					var hsb = $cpick.colpickGetHSB();
+					var rgbhex = colpick.hsbToHex(hsb);
 					var bIsWhite = (hsb.s < 20);
 					var white_value = ui.value-1;
 					if (white_value<0) white_value=0;
 					if (white_value>255) white_value=255;
-					$.setColValue = setInterval(function () { SetColValue($.devIdx, (white_value << 16) + hsb.h, hsb.b, bIsWhite); }, 400);
+					$.setColValue = setInterval(function () { SetColValue($.devIdx, rgbhex, white_value, bIsWhite); }, 400);
 				},
 				stop: function (event, ui) {
 					clearInterval($.setColValue);
 					var hsb = $cpick.colpickGetHSB();
+					var rgbhex = colpick.hsbToHex(hsb);
 					var bIsWhite = (hsb.s < 20);
 					var white_value = ui.value-1;
 					if (white_value<0) white_value=0;
 					if (white_value>255) white_value=255;
-					$.setColValue = setInterval(function () { SetColValue($.devIdx, (white_value << 16) + hsb.h, hsb.b, bIsWhite); }, 400);
+					$.setColValue = setInterval(function () { SetColValue($.devIdx, rgbhex, white_value, bIsWhite); }, 400);
 				}
 			});			
 
@@ -1150,7 +1152,7 @@ define(['app'], function (app) {
 			});
 		}
 
-		SetColValue = function (idx, hue, brightness, isWhite) {
+		SetColValue = function (idx, rgbhex, brightness, isWhite) {
 			clearInterval($.setColValue);
 			if (permissions.hasPermission("Viewer")) {
 				HideNotify();
@@ -1158,7 +1160,8 @@ define(['app'], function (app) {
 				return;
 			}
 			$.ajax({
-				url: "json.htm?type=command&param=setcolbrightnessvalue&idx=" + idx + "&hue=" + hue + "&brightness=" + brightness + "&iswhite=" + isWhite,
+				//url: "json.htm?type=command&param=setcolbrightnessvalue&idx=" + idx + "&hue=" + hue + "&brightness=" + brightness + "&iswhite=" + isWhite,
+				url: "json.htm?type=command&param=setcolbrightnessvalue2&idx=" + idx + "&hex=" + rgbhex + "&brightness=" + brightness + "&iswhite=" + isWhite,
 				async: false,
 				dataType: 'json'
 			});
@@ -1212,6 +1215,7 @@ define(['app'], function (app) {
 		}
 
 		appLampSetKelvin = function (kelvin) {
+			console.log(kelvin);
 			$.ajax({
 				url: "json.htm?type=command&param=setkelvinlevel&idx=" + $.devIdx + "&kelvin=" + kelvin,
 				async: false,
@@ -1725,20 +1729,22 @@ define(['app'], function (app) {
 				slide: function (event, ui) { //When the slider is sliding
 					clearInterval($.setColValue);
 					var hsb = $cpick.colpickGetHSB();
+					var rgbhex = colpick.hsbToHex(hsb);
 					var bIsWhite = (hsb.s < 20);
 					var white_value = ui.value-1;
 					if (white_value<0) white_value=0;
 					if (white_value>255) white_value=255;
-					$.setColValue = setInterval(function () { SetColValue($.devIdx, (white_value << 16) + hsb.h, hsb.b, bIsWhite); }, 400);
+					$.setColValue = setInterval(function () { SetColValue($.devIdx, rgbhex, white_value, bIsWhite); }, 400);
 				},
 				stop: function (event, ui) {
 					clearInterval($.setColValue);
 					var hsb = $cpick.colpickGetHSB();
+					var rgbhex = colpick.hsbToHex(hsb);
 					var bIsWhite = (hsb.s < 20);
 					var white_value = ui.value-1;
 					if (white_value<0) white_value=0;
 					if (white_value>255) white_value=255;
-					$.setColValue = setInterval(function () { SetColValue($.devIdx, (white_value << 16) + hsb.h, hsb.b, bIsWhite); }, 400);
+					$.setColValue = setInterval(function () { SetColValue($.devIdx, rgbhex, white_value, bIsWhite); }, 400);
 				}
 			});			
 			$("#lightcontent #optionRGB").prop('checked', (sat == 100));
@@ -2467,22 +2473,16 @@ define(['app'], function (app) {
 										(item.Status == 'Group On') ||
 										(item.Status.indexOf('Set ') == 0)
 									) {
-										if (item.SubType == "RGB") {
-											img = '<img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48">';
-										}
-										else if (item.SubType.indexOf("RGBW") >= 0) {
-											img = '<img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48">';
+										if (item.SubType.indexOf("RGB") >= 0) {
+											img = '<img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',\'' + item.Color.replace(/\"/g , '\&quot;') + '\',\'' + item.SubType + '\');" class="lcursor" height="48" width="48">';
 										}
 										else {
 											img = '<img src="images/' + item.Image + '48_On.png" title="' + $.t("Turn Off") + '" onclick="SwitchLight(' + item.idx + ',\'Off\',RefreshLights,' + item.Protected + ');" class="lcursor" height="48" width="48">';
 										}
 									}
 									else {
-										if (item.SubType == "RGB") {
-											img = '<img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ',\'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48">';
-										}
-										else if (item.SubType.indexOf("RGBW") >= 0) {
-											img = '<img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ',\'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48">';
+										if (item.SubType.indexOf("RGB") >= 0) {
+											img = '<img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ',\'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',\'' + item.Color.replace(/\"/g , '\&quot;') + '\',\'' + item.SubType + '\');" class="lcursor" height="48" width="48">';
 										}
 										else {
 											img = '<img src="images/' + item.Image + '48_Off.png" title="' + $.t("Turn On") + '" onclick="SwitchLight(' + item.idx + ',\'On\',RefreshLights,' + item.Protected + ');" class="lcursor" height="48" width="48">';
@@ -3056,22 +3056,16 @@ define(['app'], function (app) {
 									(item.Status.indexOf('NightMode') == 0) ||
 									(item.Status.indexOf('Disco ') == 0)
 								) {
-									if (item.SubType == "RGB") {
-										xhtm += '\t      <td id="img"><img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48"></td>\n';
-									}
-									else if (item.SubType.indexOf("RGBW") >= 0) {
-										xhtm += '\t      <td id="img"><img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48"></td>\n';
+									if (item.SubType.indexOf("RGB") >= 0) {
+										xhtm += '\t      <td id="img"><img src="images/RGB48_On.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',\'' + item.Color.replace(/\"/g , '\&quot;') + '\',\'' + item.SubType + '\');" class="lcursor" height="48" width="48"></td>\n';
 									}
 									else {
 										xhtm += '\t      <td id="img"><img src="images/' + item.Image + '48_On.png" title="' + $.t("Turn Off") + '" onclick="SwitchLight(' + item.idx + ',\'Off\',\'RefreshLights\',' + item.Protected + ');" class="lcursor" height="48" width="48"></td>\n';
 									}
 								}
 								else {
-									if (item.SubType == "RGB") {
-										xhtm += '\t      <td id="img"><img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ',\'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48"></td>\n';
-									}
-									else if (item.SubType.indexOf("RGBW") >= 0) {
-										xhtm += '\t      <td id="img"><img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ',\'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',' + item.Hue + ');" class="lcursor" height="48" width="48"></td>\n';
+									if (item.SubType.indexOf("RGB") >= 0) {
+										xhtm += '\t      <td id="img"><img src="images/RGB48_Off.png" onclick="ShowRGBWPopup(event, ' + item.idx + ', \'RefreshLights\',' + item.Protected + ',' + item.MaxDimLevel + ',' + item.LevelInt + ',\'' + item.Color.replace(/\"/g , '\&quot;') + '\',\'' + item.SubType + '\');" class="lcursor" height="48" width="48"></td>\n';
 									}
 									else {
 										xhtm += '\t      <td id="img"><img src="images/' + item.Image + '48_Off.png" title="' + $.t("Turn On") + '" onclick="SwitchLight(' + item.idx + ',\'On\',RefreshLights,' + item.Protected + ');" class="lcursor" height="48" width="48"></td>\n';

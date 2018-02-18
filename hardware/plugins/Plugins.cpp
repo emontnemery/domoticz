@@ -1514,10 +1514,11 @@ namespace Plugins {
 		return true;
 	}
 
-	void CPlugin::SendCommand(const int Unit, const std::string &command, const int level, const int hue)
+	void CPlugin::SendCommand(const int Unit, const std::string &command, const int level, const _tColor color)
 	{
 		//	Add command to message queue
-		onCommandCallback*	Message = new onCommandCallback(this, Unit, command, level, hue);
+		std::string JSONColor = color.toJSONfixedpoint();
+		onCommandCallback*	Message = new onCommandCallback(this, Unit, command, level, JSONColor);
 		{
 			boost::lock_guard<boost::mutex> l(PluginMutex);
 			PluginMessageQueue.push(Message);

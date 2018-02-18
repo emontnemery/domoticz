@@ -48,6 +48,24 @@ void StringSplit(std::string str, const std::string &delim, std::vector<std::str
 	}
 }
 
+uint64_t strtoui64(std::string str)
+{
+	uint64_t ul;
+	std::stringstream ss;
+	ss << str;
+	ss >> ul;
+	return ul;
+}
+
+uint64_t hexstrtoui64(std::string str)
+{
+	uint64_t ul;
+	std::stringstream ss;
+    ss << std::hex << str;
+    ss >> ul;
+	return ul;
+}
+
 void stdreplace(
 	std::string &inoutstring,
 	const std::string& replaceWhat,

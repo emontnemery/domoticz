@@ -27,7 +27,6 @@ BleBox::BleBox(const int id, const int pollIntervalsec) :
 {
 	_log.Log(LOG_STATUS, "BleBox: Create instance");
 	m_HwdID = id;
-	m_LimitlessRGBWcHueState = 0.0;
 	m_LimitlessRGBWisWhiteState = true;
 	m_LimitlessRGBWbrightnessState = 255;
 	SetSettings(pollIntervalsec);
@@ -526,9 +525,11 @@ bool BleBox::WriteToHardware(const char *pdata, const unsigned char length)
 		switch (pLed->command)
 		{
 			case Limitless_LedOn: {
-				if(m_LimitlessRGBWcHueState != 0.0 && !m_LimitlessRGBWisWhiteState)
+				if(m_LimitlessRGBWColorState.valid && !m_LimitlessRGBWisWhiteState)
 				{
-					hue2rgb(m_LimitlessRGBWcHueState, red, green, blue, m_LimitlessRGBWbrightnessState);
+					red = round(m_LimitlessRGBWColorState.r*float(m_LimitlessRGBWbrightnessState));
+					green = round(m_LimitlessRGBWColorState.g*float(m_LimitlessRGBWbrightnessState));
+					blue = round(m_LimitlessRGBWColorState.b*float(m_LimitlessRGBWbrightnessState));
 					white = 0;
 				}
 				else
@@ -548,13 +549,14 @@ bool BleBox::WriteToHardware(const char *pdata, const unsigned char length)
 				break;
 			case Limitless_SetColorToWhite: {
 				m_LimitlessRGBWisWhiteState = true;
-				m_LimitlessRGBWcHueState = (360.0f/255.0f)*float(pLed->value);//hue given was in range of 0-255 - Store Hue value to object
+				//TODO: Is there any point of doing this?
+				m_LimitlessRGBWColorState = pLed->color;
 				setColor = false;//Sending is done by SetBrightnessLevel
 				break;
 			}
 			case Limitless_SetRGBColour: {
 				m_LimitlessRGBWisWhiteState = false;
-				m_LimitlessRGBWcHueState = (360.0f/255.0f)*float(pLed->value);//hue given was in range of 0-255 - Store Hue value to object
+				m_LimitlessRGBWColorState = pLed->color;
 				setColor = false;//Sending is done by SetBrightnessLevel
 				break;
 			}
@@ -573,7 +575,9 @@ bool BleBox::WriteToHardware(const char *pdata, const unsigned char length)
 				}
 				else
 				{
-					hue2rgb(m_LimitlessRGBWcHueState, red, green, blue, dMax_Send);
+					red = round(m_LimitlessRGBWColorState.r*float(dMax_Send));
+					green = round(m_LimitlessRGBWColorState.g*float(dMax_Send));
+					blue = round(m_LimitlessRGBWColorState.b*float(dMax_Send));
 					white = 0;
 				}
 				break;
