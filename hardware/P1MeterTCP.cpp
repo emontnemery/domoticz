@@ -65,14 +65,20 @@ bool P1MeterTCP::StartHardware()
 
 bool P1MeterTCP::StopHardware()
 {
-	if (isConnected())
+	if (m_thread)
 	{
-		try {
-			disconnect();
-		} catch(...)
+		m_stoprequested = true;
+		if (isConnected())
 		{
-			//Don't throw from a Stop command
+			try {
+				disconnect();
+			} catch(...)
+			{
+				//Don't throw from a Stop command
+			}
 		}
+		m_thread->join();
+		m_thread.reset();
 	}
 	m_bIsStarted=false;
 	return true;
